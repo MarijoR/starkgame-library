@@ -2,7 +2,7 @@
 
 # Imports 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
-from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_add
+from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_add, uint256_check 
 from starkware.cairo.common.math import assert_lt 
 from starkware.starknet.common.syscalls import (get_contract_address, get_caller_address)
 
@@ -86,9 +86,21 @@ struct Room:
   member high_score : Uint256
 end
 
-# STORAGE VARIABLES 
+# player struct 
+struct Player:
+    member address : felt 
+    member username : felt 
+    member total_winnings : Uint256
+end 
 
+###  
+### STORAGE
+### VARIABLES
+###
+
+## 
 ## HELPERS 
+##
 
 # storage for the ecosystem token address
 @storage_var
@@ -127,11 +139,15 @@ end
 ## Players 
 
 @storage_var 
-
+func players(account : felt) -> (player : Player):
+end 
 
 # EXTERNAL FUNCTIONS 
 
-## GAMES
+### 
+### GAMES
+### 
+
 
 # Games will be active straight away upon creation
 @external
@@ -147,11 +163,26 @@ func create_new_game{
         game_owner : felt,
         entry_price : Uint256
     ) -> (success : felt):
-
     alloc_locals
-
     # check if owner is calling this
     Ownable_only_owner()
+
+    # uint256 checks 
+    with_attr error_message("game_max_players is not a valid Uint256"):
+        uint256_check(game_max_players)
+    end 
+
+    with_attr error_message("game_min_players is not a valid Uint256"):
+        uint256_check(game_min_players)
+    end 
+
+    with_attr error_message("max_number_of_rooms is not a valid Uint256"):
+        uint256_check(max_number_of_rooms)
+    end 
+
+    with_attr error_message("entry_price is not a valid Uint256"):
+        uint256_check(entry_price)
+    end
 
     # Get the current game ID
     let (local current_game_id : Uint256) = game_id_counter.read()
@@ -248,7 +279,9 @@ func remove_game{
     return ()
 end 
 
-## ROOMS
+### 
+### ROOMS
+###
 
 # function or game owner only
 @external
@@ -300,15 +333,42 @@ func create_room_for_game{
     return (room_index_incrased) 
 end   
 
-## PLAYERS 
+###  
+### PLAYERS
+###
 
+# function to create a new player account, only the owner can call this from the SC 
+# on the frontend this request will need to be signed by the owner of the contract 
+@external 
+func create_player_accounts{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+    }(
+        account : felt,
+        username : felt 
+    ):
+    Ownable_only_owner()
+
+    let player = Player(
+        address=account,
+        username=username,
+        total_winnings=Uint256(0,0)
+    )
+
+    # write the player to storage
+    players.write(account=account, value=player)
+    return () 
+end 
+
+# TODO 
 # Allows a user to join a room 
 @external
 func player_join_room{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
         range_check_ptr,
-    } (
+    }(
         room_id : Uint256, 
         game_id : Uint256
     ) -> (success : felt):
@@ -353,6 +413,18 @@ func pay_fee_for_room{
     ) -> (success : felt):
     alloc_locals 
 
+    with_attr error_message("amount is not a valid uint256")
+        uint256_check(amount)
+    end 
+
+    with_attr error_message("room_id is not a valiud uint256")
+        uint256_check(room_id)
+    end 
+
+    with_attr error_message("game_id is not a valid uint256")
+        uint256_check(game_id)
+    end 
+
     # get the ecosystem token 
     let (local token_address_local) = token_address.read()
 
@@ -364,7 +436,7 @@ func pay_fee_for_room{
 
     # assert 
     let (local result) = uint256_lt(amount, caller_balance)
-    with_attr error_message("Balance is less than the price of the game):
+    with_attr error_message("Balance is less than the price of the game"):
         assert result = 1
     end 
 
@@ -392,12 +464,10 @@ func withdraw_funds{
         pedersen_ptr: HashBuiltin*,
         range_check_ptr,
     }():
-
     alloc_locals 
 
     # check that we are the owners 
     Ownable_only_owner()
-
     # get the values we need: caller address, our contract address, and the address of the ecosystem token 
     let (local caller_address) = get_caller_address()
     let (local contract_address) = get_contract_address()
@@ -409,11 +479,12 @@ func withdraw_funds{
     # transfer the tokens 
     IERC20.transferFrom(contract_address=token_address, sender=contract_address, recipient=caller_address, amount=balance)
 
-    # TODO add check that funds have been transfered 
+    # TODO could add check that funds have been transfered 
 
     return () 
 end 
 
+# TODO (is it needed?)
 # internal function to confirm that a transfer was successful
 func verify_transfer{
         syscall_ptr: felt*,
@@ -428,6 +499,8 @@ func verify_transfer{
 end 
 
 # could add a way for game owners to withdraw funds from their games, however this would require to take a percentage off 
+# TODO 
+
 
 # VIEW FUNCTIONS 
 
@@ -474,6 +547,15 @@ func get_room_information{
 end 
 
 ## PLAYERS 
+
+@view 
+func get_player_information{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+    }(address : felt) -> (player : Player):
+    
+end 
 
 ## HELPERS 
 
