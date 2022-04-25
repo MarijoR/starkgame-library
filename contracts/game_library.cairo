@@ -1,9 +1,11 @@
 %lang starknet 
 
 # Imports 
+from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.cairo_builtins import HashBuiltin
-from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_add, uint256_check 
-from starkware.cairo.common.math import assert_lt 
+from starkware.cairo.common.uint256 import Uint256, uint256_lt, uint256_add, uint256_le , uint256_check 
+from starkware.cairo.common.math import assert_lt
+from starkware.cairo.common.math_cmp import is_le 
 from starkware.starknet.common.syscalls import (get_contract_address, get_caller_address)
 
 # Ownable stuff
@@ -26,6 +28,8 @@ from openzeppelin.security.pausable import (
     Pausable_when_not_paused
 )
 
+from openzeppelin.security.safemath import (uint256_checked_add, uint256_checked_div_rem, uint256_checked_mul)
+
 # ERC20 Stuff 
 from openzeppelin.token.erc20.interfaces.IERC20 import IERC20 
 
@@ -47,23 +51,6 @@ func constructor{
     return ()
 end
 
-# Events 
-
-@event 
-func game_created(game : Game):
-end 
-
-@event 
-func room_created(room : Room):
-end 
-
-@event 
-func player_joined_room(game_id : Uint256, room_id : Uint256, account : felt):
-end 
-
-@event
-func game_started(game_id : Uint256, room_id : Uint256):
-end 
 
 # STRUCTS 
 
@@ -86,6 +73,8 @@ struct Room:
   member winner_address : felt
   member high_score : Uint256
   member start_time : felt 
+  member current_number_of_players : Uint256
+  member has_started : felt 
 end
 
 # player struct 
@@ -142,6 +131,14 @@ end
 
 @storage_var 
 func players(account : felt) -> (player : Player):
+end 
+
+@storage_var
+func players_to_room(player_account : felt, index : Uint256) -> (room_id : Uint256):
+end 
+
+@storage_var 
+func players_to_room_length(player_account : felt) -> (length : Uint256):
 end 
 
 # EXTERNAL FUNCTIONS 
@@ -217,8 +214,6 @@ func create_new_game{
     tempvar pedersen_ptr = pedersen_ptr
     tempvar range_check_ptr = range_check_ptr
 
-    # emit the event 
-    game_created.emit(game=game)
     return (1)
 end
 
@@ -254,7 +249,8 @@ func toggle_game_state{
       game_min_players=game.game_min_players,
       max_number_of_rooms=game.max_number_of_rooms,
       state=new_state,
-      entry_price=game.entry_price
+      entry_price=game.entry_price,
+      duration=0 
     )
 
     # write back the game to its original place 
@@ -287,6 +283,9 @@ end
 ### ROOMS
 ###
 
+
+# settle_winner Only_Owner()
+
 # function or game owner only
 @external
 func create_room_for_game{
@@ -314,8 +313,10 @@ func create_room_for_game{
       entry_price=entry_price,
       game_name=game_name,
       winner_address=0,
-      high_score=zero
-      start_time=0
+      high_score=zero,  
+      start_time=0,
+      current_number_of_players=zero,
+      has_started=0
       )
 
     # get the index free
@@ -379,11 +380,55 @@ func player_join_room{
     ) -> (success : felt):
     alloc_locals 
 
-    # 1. check if room has space 
-    # 2. check if room has not started yet 
-    # 3. pay fee (get it first)
-    # 4. associate player - room 
+    with_attr error_message("game_id is not a valid uint256"):
+        uint256_check(game_id)
+    end 
+
+    with_attr error_message("room_id is not a valid uint256"):
+        uint256_check(room_id)
+    end 
+    # get the room object
     let (local room : Room) = rooms_mapping.read(room_id) 
+    
+    # 1. check if room has started
+    with_attr error_message("You cannot join a room that has already started"):
+        assert room.has_started = 0
+    end         
+    
+  
+    # 2. check if room has space
+    local one : Uint256 = Uint256(1, 0) 
+    let (local new_number_of_players) = uint256_checked_add(room.current_number_of_players, one)
+
+    let (local game : Game) = games_mapping.read(game_id)
+    with_attr error_message("The room has reached the max number of players"):
+        uint256_le(new_number_of_players, game.game_max_players)
+    end  
+
+    # 3. pay fee (get it first)
+    let (local token_address) = token_address_storage.read()
+    let (local caller_address) = get_caller_address()
+    let (local contract_address) = get_contract_address()
+    let (local allowance : Uint256) = IERC20.allowance(
+        contract_address=token_address, 
+        owner=caller_address, 
+        spender=contract_address)
+
+    with_attr error_message("You need to approve the contract to spend your tokens"):
+        uint256_le(allowance, game.entry_price)
+    end 
+
+    IERC20.transferFrom(
+        contract_address=token_address, 
+        sender=caller_address, 
+        recipient=contract_address, 
+        amount=game.entry_price
+    )
+    # 4. associate player - room 
+    let (local insertion_index : Uint256) = players_to_room_length.read(caller_address)
+    players_to_room.write(player_account=caller_address, index=insertion_index, value=room_id)
+    let (local new_insertion_index : Uint256) = uint256_checked_add(insertion_index, one)
+    players_to_room_length.write(player_account=caller_address, value=new_insertion_index)
 
     return (1)
 end 
@@ -394,11 +439,34 @@ func start_room{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
         range_check_ptr,
-    }(room_id : Uint256) -> (success : felt):
+    }(room_id : Uint256, game_id : Uint256) -> (success : felt):
     alloc_locals
 
+    # uint256 checks 
+    with_attr error_message("game_id is not a valid uint256"):
+        uint256_check(game_id)
+    end 
+
+    with_attr error_message("room_id is not a valid uint256"):
+        uint256_check(room_id)
+    end 
     # check if room hasn't started already 
+    let (local room : Room) = rooms_mapping.read(room_id) 
+    
+    # 1. check if room has started
+    with_attr error_message("You cannot join a room that has already started"):
+        assert room.has_started = 0
+    end         
+    
     # check that minimum number of player is there 
+    let (local game : Game) = games_mapping.read(game_id=game_id)
+    with_attr error_message("The minimum number of players has not been reached yet"):
+        uint256_le(room.current_number_of_players, game.game_min_players)
+    end 
+
+    # set room started to 1 
+    room.has_started=1
+    rooms_mapping.write(room_id=room_id, value=room)
 
     return (1)
 end     
@@ -407,13 +475,91 @@ end
 ### HELPERS 
 ### 
 
+func reward{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+    }(
+        winners_len : felt ,
+        winners : felt*,
+        rewards_len : felt, 
+        rewards : felt* 
+    ):
+    alloc_locals
+    return ()
+
+end 
+
+# calculation 
+# 1,2,3 with prizes 
+# 1 60% of pot 
+# 2 25% of pot 
+# 3 10% of pot 
+# house 10% of pot 
+# if players < 3 
+# 
+
+func calculate_rewards{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+    }(amount_of_players : Uint256, entry_price : Uint256) -> (reward_len : felt, reward : felt*):
+    alloc_locals
+
+    # WIP 
+
+    # let (local cmp) = is_le(amount_of_players.low, 2)
+
+    # let (local reward_array : felt*) = alloc() 
+  
+    # if cmp == 1:
+    #     if amount_of_players.low == 2:
+    #         # 100 tokens 
+    #         # 60 
+    #         # 25 
+    #         # 10 
+    #         # a[0] = 60 a[1]=25 a[2]=10 
+    #         # 2/10 = 
+    #         let (local tmp_amount : Uint256) = uint256_checked_mul(entry_price, amount_of_players)
+    #         let (local tmp_quotient, tmp_remainder : Uint256) = uint256_checked_div_rem(tmp_amount, Uint256(10, 0))
+    #         let (local winner_1 : Uint256) = uint256_checked_mul(tmp_quotient, 6)
+    #         let (local winner_1_part_2 : Uint256) = uint256_checked_mul(
+    #         reward_array[0]=
+    #         tempvar syscall_ptr = syscall_ptr
+    #         tempvar pedersen_ptr = pedersen_ptr
+    #         tempvar range_check_ptr = range_check_ptr
+    #     else :
+    #         tempvar syscall_ptr = syscall_ptr
+    #         tempvar pedersen_ptr = pedersen_ptr
+    #         tempvar range_check_ptr = range_check_ptr
+    #     end 
+    #         tempvar syscall_ptr = syscall_ptr
+    #         tempvar pedersen_ptr = pedersen_ptr
+    #         tempvar range_check_ptr = range_check_ptr
+    # else:
+    #     tempvar syscall_ptr = syscall_ptr
+    #     tempvar pedersen_ptr = pedersen_ptr
+    #     tempvar range_check_ptr = range_check_ptr
+    # end
+
+    # let (local tmp : felt*) = alloc()
+    
+    return (1, tmp)
+
+    
+end 
+
+func fill_array(new_ptr: felt*, old_ptr: felt*):
+    assert [new_ptr] = [old_ptr]
+    fill_array(new_ptr+1,old_ptr+1)
+end
 
 # internal function to get the entry fee for a game 
 func get_fee_for_game{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
         range_check_ptr,
-    } (game_id : Uint256):
+    } (game_id : Uint256) -> (fee : Uint256):
 
     alloc_locals 
 
@@ -436,26 +582,29 @@ func pay_fee_for_room{
     ) -> (success : felt):
     alloc_locals 
 
-    with_attr error_message("amount is not a valid uint256")
+    with_attr error_message("amount is not a valid uint256"):
         uint256_check(amount)
     end 
 
-    with_attr error_message("room_id is not a valiud uint256")
+    with_attr error_message("room_id is not a valiud uint256"):
         uint256_check(room_id)
     end 
 
-    with_attr error_message("game_id is not a valid uint256")
+    with_attr error_message("game_id is not a valid uint256"):
         uint256_check(game_id)
     end 
 
     # get the ecosystem token 
-    let (local token_address_local) = token_address.read()
+    let (local token_address) = token_address_storage.read()
 
     # get contract address
     let (local contract_address) = get_contract_address()
 
+    # allowance check 
+    let (local allowance : Uint256) = IERC20.allowance(contract_address=token_address, owner=caller_address, spender=contract_address)
+    
     # check if the balance of the caller is greater than the fee 
-    let (local caller_balance : Uint256) = IERC20.balanceOf(contract_address=token_address_local, account=caller_address)
+    let (local caller_balance : Uint256) = IERC20.balanceOf(contract_address=token_address, account=caller_address)
 
     # assert 
     let (local result) = uint256_lt(amount, caller_balance)
@@ -463,9 +612,14 @@ func pay_fee_for_room{
         assert result = 1
     end 
 
+    let (local result) = uint256_lt(amount, allowance)
+    with_attr error_message("You should approve the contract to spend you tokens first"):
+        assert result = 1
+    end 
+
     # transfer the tokens 
     let (local success) = IERC20.transferFrom(
-                            contract_address=token_address_local, 
+                            contract_address=token_address, 
                             sender=caller_address, 
                             recipient=contract_address, 
                             amount=amount
@@ -477,7 +631,7 @@ func pay_fee_for_room{
     tempvar pedersen_ptr = pedersen_ptr
     tempvar range_check_ptr = range_check_ptr
     
-    return (return success)
+    return (success)
 end 
 
 # function for owner to withdraw funds 
@@ -496,6 +650,7 @@ func withdraw_funds{
     let (local contract_address) = get_contract_address()
     let (local token_address) = token_address_storage.read()
 
+    
     # get the total quantity of token held in the contract
     let balance : Uint256 = IERC20.balanceOf(contract_address=token_address, account=contract_address)
 
@@ -504,23 +659,6 @@ func withdraw_funds{
 
     return () 
 end 
-
-# TODO (is it needed?)
-# internal function to confirm that a transfer was successful
-func verify_transfer{
-        syscall_ptr: felt*,
-        pedersen_ptr: HashBuiltin*,
-        range_check_ptr,
-    } (
-        from : felt, 
-        recipient : felt
-    ) -> (result : felt):
-
-    return (1)
-end 
-
-# could add a way for game owners to withdraw funds from their games, however this would require to take a percentage off 
-# TODO 
 
 
 # VIEW FUNCTIONS 
@@ -567,6 +705,7 @@ func get_room_information{
     return (room)
 end 
 
+
 ## PLAYERS 
 
 @view 
@@ -575,7 +714,9 @@ func get_player_information{
         pedersen_ptr: HashBuiltin*,
         range_check_ptr,
     }(address : felt) -> (player : Player):
-    
+    alloc_locals
+    let (local player : Player) = players.read(address)
+    return (player)
 end 
 
 ## HELPERS 

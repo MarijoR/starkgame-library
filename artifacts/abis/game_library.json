@@ -1,0 +1,376 @@
+[
+    {
+        "members": [
+            {
+                "name": "low",
+                "offset": 0,
+                "type": "felt"
+            },
+            {
+                "name": "high",
+                "offset": 1,
+                "type": "felt"
+            }
+        ],
+        "name": "Uint256",
+        "size": 2,
+        "type": "struct"
+    },
+    {
+        "members": [
+            {
+                "name": "game_name",
+                "offset": 0,
+                "type": "felt"
+            },
+            {
+                "name": "game_max_players",
+                "offset": 1,
+                "type": "Uint256"
+            },
+            {
+                "name": "game_min_players",
+                "offset": 3,
+                "type": "Uint256"
+            },
+            {
+                "name": "max_number_of_rooms",
+                "offset": 5,
+                "type": "Uint256"
+            },
+            {
+                "name": "state",
+                "offset": 7,
+                "type": "felt"
+            },
+            {
+                "name": "entry_price",
+                "offset": 8,
+                "type": "Uint256"
+            },
+            {
+                "name": "duration",
+                "offset": 10,
+                "type": "felt"
+            }
+        ],
+        "name": "Game",
+        "size": 11,
+        "type": "struct"
+    },
+    {
+        "members": [
+            {
+                "name": "prize",
+                "offset": 0,
+                "type": "Uint256"
+            },
+            {
+                "name": "entry_price",
+                "offset": 2,
+                "type": "Uint256"
+            },
+            {
+                "name": "game_name",
+                "offset": 4,
+                "type": "felt"
+            },
+            {
+                "name": "winner_address",
+                "offset": 5,
+                "type": "felt"
+            },
+            {
+                "name": "high_score",
+                "offset": 6,
+                "type": "Uint256"
+            },
+            {
+                "name": "start_time",
+                "offset": 8,
+                "type": "felt"
+            },
+            {
+                "name": "current_number_of_players",
+                "offset": 9,
+                "type": "Uint256"
+            },
+            {
+                "name": "has_started",
+                "offset": 11,
+                "type": "felt"
+            }
+        ],
+        "name": "Room",
+        "size": 12,
+        "type": "struct"
+    },
+    {
+        "members": [
+            {
+                "name": "address",
+                "offset": 0,
+                "type": "felt"
+            },
+            {
+                "name": "username",
+                "offset": 1,
+                "type": "felt"
+            },
+            {
+                "name": "total_winnings",
+                "offset": 2,
+                "type": "Uint256"
+            }
+        ],
+        "name": "Player",
+        "size": 4,
+        "type": "struct"
+    },
+    {
+        "inputs": [
+            {
+                "name": "owner",
+                "type": "felt"
+            },
+            {
+                "name": "token_address",
+                "type": "felt"
+            }
+        ],
+        "name": "constructor",
+        "outputs": [],
+        "type": "constructor"
+    },
+    {
+        "inputs": [
+            {
+                "name": "game_name",
+                "type": "felt"
+            },
+            {
+                "name": "game_max_players",
+                "type": "Uint256"
+            },
+            {
+                "name": "game_min_players",
+                "type": "Uint256"
+            },
+            {
+                "name": "max_number_of_rooms",
+                "type": "Uint256"
+            },
+            {
+                "name": "game_owner",
+                "type": "felt"
+            },
+            {
+                "name": "entry_price",
+                "type": "Uint256"
+            },
+            {
+                "name": "duration",
+                "type": "felt"
+            }
+        ],
+        "name": "create_new_game",
+        "outputs": [
+            {
+                "name": "success",
+                "type": "felt"
+            }
+        ],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            },
+            {
+                "name": "new_state",
+                "type": "felt"
+            }
+        ],
+        "name": "toggle_game_state",
+        "outputs": [
+            {
+                "name": "state",
+                "type": "felt"
+            }
+        ],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            }
+        ],
+        "name": "remove_game",
+        "outputs": [],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            },
+            {
+                "name": "entry_price",
+                "type": "Uint256"
+            },
+            {
+                "name": "game_name",
+                "type": "felt"
+            }
+        ],
+        "name": "create_room_for_game",
+        "outputs": [
+            {
+                "name": "room_id",
+                "type": "Uint256"
+            }
+        ],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "account",
+                "type": "felt"
+            },
+            {
+                "name": "username",
+                "type": "felt"
+            }
+        ],
+        "name": "create_player_accounts",
+        "outputs": [],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "room_id",
+                "type": "Uint256"
+            },
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            }
+        ],
+        "name": "player_join_room",
+        "outputs": [
+            {
+                "name": "success",
+                "type": "felt"
+            }
+        ],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "room_id",
+                "type": "Uint256"
+            },
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            }
+        ],
+        "name": "start_room",
+        "outputs": [
+            {
+                "name": "success",
+                "type": "felt"
+            }
+        ],
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "withdraw_funds",
+        "outputs": [],
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "game_id",
+                "type": "Uint256"
+            }
+        ],
+        "name": "get_game_information",
+        "outputs": [
+            {
+                "name": "game",
+                "type": "Game"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "get_number_of_games",
+        "outputs": [
+            {
+                "name": "number",
+                "type": "felt"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "room_id",
+                "type": "Uint256"
+            }
+        ],
+        "name": "get_room_information",
+        "outputs": [
+            {
+                "name": "room",
+                "type": "Room"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "address",
+                "type": "felt"
+            }
+        ],
+        "name": "get_player_information",
+        "outputs": [
+            {
+                "name": "player",
+                "type": "Player"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "get_contract_balance",
+        "outputs": [
+            {
+                "name": "balance",
+                "type": "felt"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]
