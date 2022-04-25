@@ -75,6 +75,7 @@ struct Game:
   member max_number_of_rooms : Uint256
   member state : felt
   member entry_price : Uint256
+  member duration : felt 
 end
 
 # room struct 
@@ -84,6 +85,7 @@ struct Room:
   member game_name : felt
   member winner_address : felt
   member high_score : Uint256
+  member start_time : felt 
 end
 
 # player struct 
@@ -161,7 +163,8 @@ func create_new_game{
         game_min_players : Uint256,
         max_number_of_rooms : Uint256,
         game_owner : felt,
-        entry_price : Uint256
+        entry_price : Uint256,
+        duration : felt 
     ) -> (success : felt):
     alloc_locals
     # check if owner is calling this
@@ -195,7 +198,8 @@ func create_new_game{
       game_min_players=game_min_players,
       max_number_of_rooms=max_number_of_rooms,
       state=1,
-      entry_price=entry_price
+      entry_price=entry_price,
+      duration=duration
     )
 
     # calculate new counter
@@ -294,10 +298,10 @@ func create_room_for_game{
       entry_price : Uint256,
       game_name : felt,
     ) -> (room_id : Uint256):
-
     alloc_locals
 
-    Ownable_get_game_owner(game_id)
+    # owner check 
+    Ownable_only_game_owner(game_id)
     # read the insertion index
     let (local insertion_index) = game_to_room_ids_length.read(game_id)
 
@@ -311,6 +315,7 @@ func create_room_for_game{
       game_name=game_name,
       winner_address=0,
       high_score=zero
+      start_time=0
       )
 
     # get the index free
@@ -383,7 +388,25 @@ func player_join_room{
     return (1)
 end 
 
-## HELPERS 
+
+@external 
+func start_room{
+        syscall_ptr: felt*,
+        pedersen_ptr: HashBuiltin*,
+        range_check_ptr,
+    }(room_id : Uint256) -> (success : felt):
+    alloc_locals
+
+    # check if room hasn't started already 
+    # check that minimum number of player is there 
+
+    return (1)
+end     
+
+### 
+### HELPERS 
+### 
+
 
 # internal function to get the entry fee for a game 
 func get_fee_for_game{
@@ -478,8 +501,6 @@ func withdraw_funds{
 
     # transfer the tokens 
     IERC20.transferFrom(contract_address=token_address, sender=contract_address, recipient=caller_address, amount=balance)
-
-    # TODO could add check that funds have been transfered 
 
     return () 
 end 
