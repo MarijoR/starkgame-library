@@ -200,7 +200,7 @@ func create_new_game{
     )
 
     # calculate new counter
-    let (local new_counter, _) = uint256_add(current_game_id, one)
+    let (local new_counter) = uint256_checked_add(current_game_id, one)
 
     # set the owner of the game
     Ownable_game_owner_initializer(game_owner, new_counter)
@@ -323,12 +323,12 @@ func create_room_for_game{
     let (local room_index : Uint256) = game_to_room_ids.read(game_id=game_id, index=insertion_index)
     # increase index
     local one : Uint256 = Uint256(1, 0)
-    let (local room_index_incrased, _) = uint256_add(room_index, one)
+    let (local room_index_incrased) = uint256_checked_add(room_index, one)
 
     game_to_room_ids.write(game_id=game_id, index=insertion_index, value=room_index_incrased)
 
     # increase insertion_index
-    let (local increased_insertion_index, _) = uint256_add(insertion_index, one)
+    let (local increased_insertion_index) = uint256_checked_add(insertion_index, one)
 
     game_to_room_ids_length.write(game_id=game_id, value=increased_insertion_index)
 
@@ -475,6 +475,7 @@ end
 ### HELPERS 
 ### 
 
+#will take an array of winners and an array of rewards and send the tokens 
 func reward{
         syscall_ptr: felt*,
         pedersen_ptr: HashBuiltin*,
@@ -542,17 +543,13 @@ func calculate_rewards{
     #     tempvar range_check_ptr = range_check_ptr
     # end
 
-    # let (local tmp : felt*) = alloc()
+    let (local tmp : felt*) = alloc()
     
     return (1, tmp)
 
     
 end 
 
-func fill_array(new_ptr: felt*, old_ptr: felt*):
-    assert [new_ptr] = [old_ptr]
-    fill_array(new_ptr+1,old_ptr+1)
-end
 
 # internal function to get the entry fee for a game 
 func get_fee_for_game{
